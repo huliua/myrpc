@@ -1,11 +1,9 @@
 package com.myrpc.handler;
 
+import cn.hutool.core.util.ClassUtil;
+import cn.hutool.core.util.ServiceLoaderUtil;
 import com.alibaba.fastjson2.JSON;
 import com.myrpc.domain.Invocation;
-import com.myrpc.domain.ServiceBean;
-import com.myrpc.domain.ServiceMetaInfo;
-import com.myrpc.loadbalance.LoadBalance;
-import com.myrpc.register.ServiceRegister;
 import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
 import org.apache.commons.io.IOUtils;
@@ -15,7 +13,6 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.List;
 
 /**
  * @author huliua
@@ -30,20 +27,12 @@ public class HttpServerHandler {
         try {
             ObjectInputStream objectInputStream = new ObjectInputStream(req.getInputStream());
             Invocation invocation = (Invocation) objectInputStream.readObject();
-
-            // 根据服务名获取对应的服务列表
-            List<ServiceMetaInfo> serviceList = ServiceRegister.getService(invocation.getServiceName());
-
-            // 负载均衡
-            ServiceMetaInfo service = LoadBalance.random(serviceList);
-
-            // 根据调用信息，在服务中获取对应的bean信息
-            List<ServiceBean> serviceBeans = ServiceRegister.getServiceBeanList(service.getKey());
-            ServiceBean serviceBean = serviceBeans.stream().filter(bean -> bean.getBeanName().equals(invocation.getClassName())).findFirst().get();
+            Class<?> serviceClass = ClassUtil.getClassLoader().loadClass(invocation.getClassName());
+            Object serviceImpl = ServiceLoaderUtil.loadFirstAvailable(serviceClass);
 
             // 服务调用
-            Method method = serviceBean.getBeanClass().getMethod(invocation.getMethodName(), invocation.getParamTypes());
-            Object result = method.invoke(serviceBean.getBeanClass().newInstance(), invocation.getArgs());
+            Method method = serviceClass.getMethod(invocation.getMethodName(), invocation.getParamTypes());
+            Object result = method.invoke(serviceImpl, invocation.getArgs());
 
             // 写入响应
             IOUtils.write(JSON.toJSONString(result), res.getOutputStream());
@@ -52,8 +41,6 @@ public class HttpServerHandler {
         } catch (InvocationTargetException e) {
             throw new RuntimeException(e);
         } catch (IllegalAccessException e) {
-            throw new RuntimeException(e);
-        } catch (InstantiationException e) {
             throw new RuntimeException(e);
         } catch (IOException e) {
             throw new RuntimeException(e);

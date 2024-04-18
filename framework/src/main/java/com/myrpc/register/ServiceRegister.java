@@ -62,6 +62,7 @@ public class ServiceRegister {
      * @param serviceName 服务名
      * @return 返回注册中心的服务列表
      */
+    @SuppressWarnings("unchecked")
     public static List<ServiceMetaInfo> getService(String serviceName) {
         // 优先从本地读取
         List<ServiceMetaInfo> serviceList = localServiceMetaInfoMap.get(serviceName);
@@ -91,12 +92,4 @@ public class ServiceRegister {
         return null;
     }
 
-    /**
-     * 根据key获取服务列表
-     * @param key
-     * @return
-     */
-    public static List<ServiceBean> getServiceBeanList(String key) {
-        return localServiceBeanMap.get(key);
-    }
 }

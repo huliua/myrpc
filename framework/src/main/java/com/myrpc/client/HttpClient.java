@@ -1,9 +1,12 @@
 package com.myrpc.client;
 
+import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.map.MapUtil;
 import com.alibaba.fastjson2.JSON;
 import com.myrpc.domain.Invocation;
 import com.myrpc.domain.ServiceMetaInfo;
 import com.myrpc.loadbalance.LoadBalance;
+import com.myrpc.loadbalance.impl.RandomLoadBalance;
 import com.myrpc.register.ServiceRegister;
 import org.apache.commons.io.IOUtils;
 
@@ -13,7 +16,10 @@ import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 /**
  * 提供给服务调用端使用
@@ -24,10 +30,27 @@ import java.util.List;
  */
 public class HttpClient {
 
+    /**
+     * 客户端--服务列表缓存
+     */
+    private static final Map<String, List<ServiceMetaInfo>> serviceCacheMap = new HashMap<>();
+
+    private final LoadBalance loadBalance;
+
+    public HttpClient() {
+        loadBalance = new RandomLoadBalance();
+    }
+
     public Object send(Invocation invocation) {
         try {
-            List<ServiceMetaInfo> serviceList = ServiceRegister.getService(invocation.getServiceName());
-            ServiceMetaInfo service = LoadBalance.random(serviceList);
+            // 优先从本地缓存中获取服务
+            List<ServiceMetaInfo> serviceList = serviceCacheMap.get(invocation.getServiceName());
+            if (CollUtil.isEmpty(serviceList)) {
+                // 本地缓存没有，则从注册中心获取
+                serviceList = ServiceRegister.getService(invocation.getServiceName());
+            }
+
+            ServiceMetaInfo service = loadBalance.loadBalance(serviceList);
             if (null == service) {
                 throw new RuntimeException("service not found");
             }
